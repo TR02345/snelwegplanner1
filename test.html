@@ -1,0 +1,4236 @@
+<!DOCTYPE html>
+<html lang="nl">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Snelwegplanner</title>
+
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    >
+
+    <style>
+
+        body {
+            margin: 0;
+            background: #f3f5f7;
+            font-family: Arial, sans-serif;
+            color: #222;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        h1 {
+            font-size: 32px;
+            margin-bottom: 25px;
+        }
+
+        .planner {
+            background: white;
+            padding: 25px;
+            border-radius: 14px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+        }
+
+        .section {
+            margin-bottom: 25px;
+        }
+
+        .section h2 {
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+
+        .row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 7px;
+        }
+
+        select {
+            width: 100%;
+            padding: 11px;
+            border: 1px solid #ccc;
+            border-radius: 7px;
+            font-size: 15px;
+            box-sizing: border-box;
+            background: white;
+        }
+
+        .via {
+            background: #f1f3f5;
+            padding: 18px;
+            border-radius: 10px;
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 8px;
+            background: #111;
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #333;
+        }
+
+        #resultaat {
+            margin-top: 25px;
+            padding: 18px;
+            background: #f1f3f5;
+            border-radius: 10px;
+            font-size: 16px;
+        }
+
+        #map {
+            height: 500px;
+            margin-top: 25px;
+            border-radius: 10px;
+        }
+
+        @media (max-width: 700px) {
+
+            .row {
+                grid-template-columns: 1fr;
+            }
+
+            .container {
+                margin: 20px auto;
+            }
+
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+<div class="container">
+
+    <h1>Snelwegplanner</h1>
+
+    <div class="planner">
+
+
+        <!-- OPRIT -->
+
+        <div class="section">
+
+            <h2>OPRIT</h2>
+
+            <div class="row">
+
+                <div>
+
+                    <label for="opritSnelweg">
+                        Snelweg
+                    </label>
+
+                    <select id="opritSnelweg">
+
+                        <option value="">
+                            Kies een snelweg
+                        </option>
+
+                    </select>
+
+                </div>
+
+
+                <div>
+
+                    <label for="oprit">
+                        Oprit
+                    </label>
+
+                    <select id="oprit">
+
+                        <option value="">
+                            Kies een aansluiting
+                        </option>
+
+                    </select>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+
+        <!-- VIA -->
+
+        <div class="section via">
+
+            <h2>VIA</h2>
+
+            <label for="viaSnelweg">
+                Knooppunt / snelweg
+            </label>
+
+            <select id="viaSnelweg">
+
+                <option value="">
+                    Geen VIA
+                </option>
+
+            </select>
+
+        </div>
+
+
+
+        <!-- AFRIT -->
+
+        <div class="section">
+
+            <h2>AFRIT</h2>
+
+            <div class="row">
+
+                <div>
+
+                    <label for="afritSnelweg">
+                        Snelweg
+                    </label>
+
+                    <select id="afritSnelweg">
+
+                        <option value="">
+                            Kies een snelweg
+                        </option>
+
+                    </select>
+
+                </div>
+
+
+                <div>
+
+                    <label for="afrit">
+                        Afrit
+                    </label>
+
+                    <select id="afrit">
+
+                        <option value="">
+                            Kies een aansluiting
+                        </option>
+
+                    </select>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+
+        <button onclick="berekenRoute()">
+            Bereken route
+        </button>
+
+
+        <div id="resultaat">
+            OSM-data wordt geladen...
+        </div>
+
+
+        <div id="map"></div>
+
+    </div>
+
+</div>
+
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+
+<script>
+
+/* ============================================================
+   OSM DATA
+   ============================================================ */
+
+let osmSnelwegen = null;
+let osmJunctions = null;
+
+let aansluitingenPerSnelweg = {};
+
+
+/* ============================================================
+   KAART
+   ============================================================ */
+
+const map = L.map("map").setView(
+    [52.2, 6.9],
+    8
+);
+
+
+L.tileLayer(
+    "https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=cb1_3uab_1_ab1fc2b9ab1730e2f89ce341",
+    {
+        attribution:
+            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+
+        subdomains: "abcd",
+
+        maxZoom: 20,
+
+        tileSize: 256,
+
+        detectRetina: false
+    }
+).addTo(map);
+
+
+let routeLayer = null;
+let startMarker = null;
+let endMarker = null;
+
+
+/* ============================================================
+   GEOJSON LADEN
+   ============================================================ */
+
+async function laadOSMData() {
+
+    try {
+
+        const snelwegenResponse =
+            await fetch(
+                "nederlandse_snelwegen.geojson"
+            );
+
+
+        if (!snelwegenResponse.ok) {
+
+            throw new Error(
+                "nederlandse_snelwegen.geojson kon niet worden geladen."
+            );
+
+        }
+
+
+        osmSnelwegen =
+            await snelwegenResponse.json();
+
+
+        const junctionResponse =
+            await fetch(
+                "nederlandse_snelwegen_junction.geojson"
+            );
+
+
+        if (!junctionResponse.ok) {
+
+            throw new Error(
+                "nederlandse_snelwegen_junction.geojson kon niet worden geladen."
+            );
+
+        }
+
+
+        osmJunctions =
+            await junctionResponse.json();
+
+
+        console.log(
+            "Snelwegen geladen:",
+            osmSnelwegen.features.length
+        );
+
+
+        console.log(
+            "Junctions geladen:",
+            osmJunctions.features.length
+        );
+
+
+        koppelAansluitingenAanSnelwegen();
+
+
+        vulSnelwegen();
+
+
+        document.getElementById(
+            "resultaat"
+        ).innerHTML =
+            "OSM-data geladen. Kies een oprit en afrit.";
+
+
+    } catch (error) {
+
+        console.error(error);
+
+
+        document.getElementById(
+            "resultaat"
+        ).innerHTML =
+            `
+            <strong>OSM-data kon niet worden geladen.</strong><br><br>
+
+            Controleer of deze bestanden naast
+            <strong>test.html</strong> staan:<br><br>
+
+            nederlandse_snelwegen.geojson<br>
+            nederlandse_snelwegen_junction.geojson
+            `;
+
+    }
+
+}
+
+
+/* ============================================================
+   REF OPHALEN
+   ============================================================ */
+
+function krijgRef(feature) {
+
+    if (
+        !feature ||
+        !feature.properties
+    ) {
+
+        return null;
+
+    }
+
+
+    if (
+        !feature.properties.ref
+    ) {
+
+        return null;
+
+    }
+
+
+    return String(
+        feature.properties.ref
+    ).trim();
+
+}
+
+
+/* ============================================================
+   EXACTE SNELWEG
+   ============================================================
+
+   A35       = WEL
+   A1;A35    = NIET
+   A35;A1    = NIET
+   A35;N35   = NIET
+   ============================================================ */
+
+function isExacteSnelweg(
+    feature,
+    snelweg
+) {
+
+    const ref =
+        krijgRef(feature);
+
+
+    if (!ref) {
+
+        return false;
+
+    }
+
+
+    return (
+        ref.toUpperCase() ===
+        snelweg.toUpperCase()
+    );
+
+}
+
+
+/* ============================================================
+   AFSTAND TUSSEN TWEE PUNTEN
+   ============================================================ */
+
+function afstandTussenPunten(
+    lat1,
+    lon1,
+    lat2,
+    lon2
+) {
+
+    const R = 6371000;
+
+    const dLat =
+        (lat2 - lat1) *
+        Math.PI / 180;
+
+    const dLon =
+        (lon2 - lon1) *
+        Math.PI / 180;
+
+
+    const a =
+        Math.sin(dLat / 2) *
+        Math.sin(dLat / 2) +
+
+        Math.cos(
+            lat1 * Math.PI / 180
+        ) *
+
+        Math.cos(
+            lat2 * Math.PI / 180
+        ) *
+
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+
+
+    const c =
+        2 *
+        Math.atan2(
+            Math.sqrt(a),
+            Math.sqrt(1 - a)
+        );
+
+
+    return R * c;
+
+}
+
+
+/* ============================================================
+   PUNT-NAAR-LIJN AFSTAND
+   ============================================================ */
+
+function afstandPuntNaarLijn(
+    lat,
+    lon,
+    coordinates
+) {
+
+    let kleinsteAfstand =
+        Infinity;
+
+
+    for (
+        let i = 0;
+        i < coordinates.length - 1;
+        i++
+    ) {
+
+        const p1 =
+            coordinates[i];
+
+        const p2 =
+            coordinates[i + 1];
+
+
+        const lat1 =
+            p1[1];
+
+        const lon1 =
+            p1[0];
+
+        const lat2 =
+            p2[1];
+
+        const lon2 =
+            p2[0];
+
+
+        const gemiddeldeLat =
+            (
+                lat1 +
+                lat2 +
+                lat
+            ) / 3;
+
+
+        const schaalX =
+            111320 *
+            Math.cos(
+                gemiddeldeLat *
+                Math.PI / 180
+            );
+
+
+        const schaalY =
+            111320;
+
+
+        const x1 =
+            lon1 *
+            schaalX;
+
+        const y1 =
+            lat1 *
+            schaalY;
+
+
+        const x2 =
+            lon2 *
+            schaalX;
+
+        const y2 =
+            lat2 *
+            schaalY;
+
+
+        const px =
+            lon *
+            schaalX;
+
+        const py =
+            lat *
+            schaalY;
+
+
+        const dx =
+            x2 - x1;
+
+        const dy =
+            y2 - y1;
+
+
+        const lengte2 =
+            dx * dx +
+            dy * dy;
+
+
+        let t = 0;
+
+
+        if (lengte2 > 0) {
+
+            t =
+                (
+                    (px - x1) * dx +
+                    (py - y1) * dy
+                ) /
+                lengte2;
+
+
+            t =
+                Math.max(
+                    0,
+                    Math.min(
+                        1,
+                        t
+                    )
+                );
+
+        }
+
+
+        const dichtX =
+            x1 +
+            t * dx;
+
+
+        const dichtY =
+            y1 +
+            t * dy;
+
+
+        const verschilX =
+            px -
+            dichtX;
+
+        const verschilY =
+            py -
+            dichtY;
+
+
+        const afstand =
+            Math.sqrt(
+                verschilX *
+                verschilX +
+
+                verschilY *
+                verschilY
+            );
+
+
+        if (
+            afstand <
+            kleinsteAfstand
+        ) {
+
+            kleinsteAfstand =
+                afstand;
+
+        }
+
+    }
+
+
+    return kleinsteAfstand;
+
+}
+
+
+/* ============================================================
+   AFSTAND PUNT NAAR OSM FEATURE
+   ============================================================ */
+
+function afstandPuntNaarFeature(
+    lat,
+    lon,
+    feature
+) {
+
+    if (
+        !feature ||
+        !feature.geometry
+    ) {
+
+        return Infinity;
+
+    }
+
+
+    const geometry =
+        feature.geometry;
+
+
+    if (
+        geometry.type ===
+        "LineString"
+    ) {
+
+        return afstandPuntNaarLijn(
+            lat,
+            lon,
+            geometry.coordinates
+        );
+
+    }
+
+
+    if (
+        geometry.type ===
+        "MultiLineString"
+    ) {
+
+        let kleinsteAfstand =
+            Infinity;
+
+
+        geometry.coordinates.forEach(
+            lijn => {
+
+                const afstand =
+                    afstandPuntNaarLijn(
+                        lat,
+                        lon,
+                        lijn
+                    );
+
+
+                if (
+                    afstand <
+                    kleinsteAfstand
+                ) {
+
+                    kleinsteAfstand =
+                        afstand;
+
+                }
+
+            }
+        );
+
+
+        return kleinsteAfstand;
+
+    }
+
+
+    return Infinity;
+
+}
+
+
+/* ============================================================
+   DICHTSTBIJZIJNDE PUNT OP LIJN
+   ============================================================ */
+
+function dichtstbijzijndePuntOpLijn(
+    lat,
+    lon,
+    coordinates
+) {
+
+    let beste = null;
+    let kleinsteAfstand = Infinity;
+
+
+    for (
+        let i = 0;
+        i < coordinates.length - 1;
+        i++
+    ) {
+
+        const p1 = coordinates[i];
+        const p2 = coordinates[i + 1];
+
+        const lat1 = p1[1];
+        const lon1 = p1[0];
+
+        const lat2 = p2[1];
+        const lon2 = p2[0];
+
+        const gemiddeldeLat =
+            (lat1 + lat2 + lat) / 3;
+
+        const schaalX =
+            111320 *
+            Math.cos(
+                gemiddeldeLat *
+                Math.PI / 180
+            );
+
+        const schaalY =
+            111320;
+
+        const x1 =
+            lon1 * schaalX;
+
+        const y1 =
+            lat1 * schaalY;
+
+        const x2 =
+            lon2 * schaalX;
+
+        const y2 =
+            lat2 * schaalY;
+
+        const px =
+            lon * schaalX;
+
+        const py =
+            lat * schaalY;
+
+        const dx =
+            x2 - x1;
+
+        const dy =
+            y2 - y1;
+
+        const lengte2 =
+            dx * dx +
+            dy * dy;
+
+        let t = 0;
+
+
+        if (lengte2 > 0) {
+
+            t =
+                (
+                    (px - x1) * dx +
+                    (py - y1) * dy
+                ) /
+                lengte2;
+
+            t =
+                Math.max(
+                    0,
+                    Math.min(
+                        1,
+                        t
+                    )
+                );
+
+        }
+
+
+        const dichtX =
+            x1 + t * dx;
+
+        const dichtY =
+            y1 + t * dy;
+
+        const verschilX =
+            px - dichtX;
+
+        const verschilY =
+            py - dichtY;
+
+        const afstand =
+            Math.sqrt(
+                verschilX * verschilX +
+                verschilY * verschilY
+            );
+
+
+        if (
+            afstand <
+            kleinsteAfstand
+        ) {
+
+            kleinsteAfstand =
+                afstand;
+
+            beste = {
+                lon:
+                    dichtX / schaalX,
+
+                lat:
+                    dichtY / schaalY,
+
+                afstand:
+                    afstand
+            };
+
+        }
+
+    }
+
+
+    return beste;
+
+}
+
+
+/* ============================================================
+   AANSLUITINGEN AAN SNELWEGEN KOPPELEN
+   ============================================================ */
+
+function koppelAansluitingenAanSnelwegen() {
+
+    aansluitingenPerSnelweg = {};
+
+    const snelwegFeatures = [];
+    const snelwegRefs = new Set();
+
+
+    osmSnelwegen.features.forEach(
+        feature => {
+
+            const ref =
+                krijgRef(feature);
+
+
+            if (
+                ref &&
+                /^A\d+$/.test(ref) &&
+                feature.geometry
+            ) {
+
+                snelwegFeatures.push({
+                    feature: feature,
+                    ref: ref
+                });
+
+                snelwegRefs.add(ref);
+
+            }
+
+        }
+    );
+
+
+    snelwegRefs.forEach(
+        snelweg => {
+
+            aansluitingenPerSnelweg[
+                snelweg
+            ] = [];
+
+        }
+    );
+
+
+    const grid = new Map();
+    const CEL_GROOTTE = 0.05;
+
+
+    function gridKey(x, y) {
+        return `${x},${y}`;
+    }
+
+
+    function voegToeAanGrid(
+        featureObject
+    ) {
+
+        const geometry =
+            featureObject.feature.geometry;
+
+
+        const lijnen =
+            geometry.type === "LineString"
+                ? [geometry.coordinates]
+                : geometry.type === "MultiLineString"
+                    ? geometry.coordinates
+                    : [];
+
+
+        lijnen.forEach(
+            coordinates => {
+
+                let minLon = Infinity;
+                let maxLon = -Infinity;
+                let minLat = Infinity;
+                let maxLat = -Infinity;
+
+
+                coordinates.forEach(
+                    coord => {
+
+                        minLon =
+                            Math.min(
+                                minLon,
+                                coord[0]
+                            );
+
+                        maxLon =
+                            Math.max(
+                                maxLon,
+                                coord[0]
+                            );
+
+                        minLat =
+                            Math.min(
+                                minLat,
+                                coord[1]
+                            );
+
+                        maxLat =
+                            Math.max(
+                                maxLat,
+                                coord[1]
+                            );
+
+                    }
+                );
+
+
+                const minX =
+                    Math.floor(
+                        minLon /
+                        CEL_GROOTTE
+                    );
+
+                const maxX =
+                    Math.floor(
+                        maxLon /
+                        CEL_GROOTTE
+                    );
+
+                const minY =
+                    Math.floor(
+                        minLat /
+                        CEL_GROOTTE
+                    );
+
+                const maxY =
+                    Math.floor(
+                        maxLat /
+                        CEL_GROOTTE
+                    );
+
+
+                for (
+                    let x = minX;
+                    x <= maxX;
+                    x++
+                ) {
+
+                    for (
+                        let y = minY;
+                        y <= maxY;
+                        y++
+                    ) {
+
+                        const key =
+                            gridKey(
+                                x,
+                                y
+                            );
+
+
+                        if (!grid.has(key)) {
+                            grid.set(
+                                key,
+                                []
+                            );
+                        }
+
+
+                        grid.get(key).push(
+                            featureObject
+                        );
+
+                    }
+
+                }
+
+            }
+        );
+
+    }
+
+
+    snelwegFeatures.forEach(
+        voegToeAanGrid
+    );
+
+
+    osmJunctions.features.forEach(
+        junction => {
+
+            if (
+                !junction.geometry ||
+                junction.geometry.type !== "Point"
+            ) {
+                return;
+            }
+
+
+            const coordinates =
+                junction.geometry.coordinates;
+
+
+            const lon =
+                coordinates[0];
+
+            const lat =
+                coordinates[1];
+
+
+            const naam =
+                junction.properties &&
+                junction.properties.name
+                    ? String(
+                        junction.properties.name
+                    ).trim()
+                    : "";
+
+
+            const ref =
+                junction.properties &&
+                junction.properties.ref
+                    ? String(
+                        junction.properties.ref
+                    ).trim()
+                    : "";
+
+
+            if (!naam && !ref) {
+                return;
+            }
+
+
+            const gx =
+                Math.floor(
+                    lon /
+                    CEL_GROOTTE
+                );
+
+
+            const gy =
+                Math.floor(
+                    lat /
+                    CEL_GROOTTE
+                );
+
+
+            let besteSnelweg = null;
+            let besteFeature = null;
+            let kleinsteAfstand = Infinity;
+
+
+            const kandidaten = new Set();
+
+
+            for (
+                let x = gx - 1;
+                x <= gx + 1;
+                x++
+            ) {
+
+                for (
+                    let y = gy - 1;
+                    y <= gy + 1;
+                    y++
+                ) {
+
+                    const lijst =
+                        grid.get(
+                            gridKey(x, y)
+                        );
+
+
+                    if (lijst) {
+
+                        lijst.forEach(
+                            item =>
+                                kandidaten.add(
+                                    item
+                                )
+                        );
+
+                    }
+
+                }
+
+            }
+
+
+            kandidaten.forEach(
+                item => {
+
+                    const afstand =
+                        afstandPuntNaarFeature(
+                            lat,
+                            lon,
+                            item.feature
+                        );
+
+
+                    if (
+                        afstand <
+                        kleinsteAfstand
+                    ) {
+
+                        kleinsteAfstand =
+                            afstand;
+
+                        besteSnelweg =
+                            item.ref;
+
+                        besteFeature =
+                            item.feature;
+
+                    }
+
+                }
+            );
+
+
+            if (
+                !besteSnelweg ||
+                kleinsteAfstand > 150
+            ) {
+
+                return;
+
+            }
+
+
+            const displayNaam =
+                naam ||
+                (
+                    ref
+                        ? `Afrit ${ref}`
+                        : "Onbekende aansluiting"
+                );
+
+
+            const lijst =
+                aansluitingenPerSnelweg[
+                    besteSnelweg
+                ];
+
+
+            if (!lijst) {
+                return;
+            }
+
+
+            const bestaatAl =
+                lijst.some(
+                    aansluiting =>
+                        aansluiting.naam
+                            .toLowerCase() ===
+                        displayNaam.toLowerCase()
+                );
+
+
+            if (bestaatAl) {
+                return;
+            }
+
+
+            lijst.push({
+
+                naam:
+                    displayNaam,
+
+                ref:
+                    ref,
+
+                lat:
+                    lat,
+
+                lon:
+                    lon
+
+            });
+
+        }
+    );
+
+
+    Object.keys(
+        aansluitingenPerSnelweg
+    ).forEach(
+        snelweg => {
+
+            aansluitingenPerSnelweg[
+                snelweg
+            ].sort(
+                (a, b) =>
+                    a.naam.localeCompare(
+                        b.naam,
+                        "nl"
+                    )
+            );
+
+        }
+    );
+
+
+    console.log(
+        "Aansluitingen per snelweg:",
+        aansluitingenPerSnelweg
+    );
+
+}
+
+
+/* ============================================================
+   ALLEEN ECHTE KNOOPPUNTEN OPHALEN
+   ============================================================
+
+   VIA mag GEEN gewone afritten bevatten.
+
+   We gebruiken hiervoor de naam van het OSM-junctionpunt.
+   Alleen punten waarvan de naam begint met "Knooppunt"
+   worden als VIA-knooppunt aangeboden.
+
+   Bijvoorbeeld:
+
+   Knooppunt Hoevelaken -> WEL
+   Knooppunt Beekbergen -> WEL
+   Apeldoorn-Noord -> NIET
+   Enschede-West -> NIET
+   ============================================================ */
+
+function krijgViaKnooppunten() {
+
+    if (
+        !osmJunctions ||
+        !osmJunctions.features
+    ) {
+
+        return [];
+
+    }
+
+
+    const knooppunten = [];
+    const uniekeNamen = new Set();
+
+
+    osmJunctions.features.forEach(
+        (junction, index) => {
+
+            if (
+                !junction.geometry ||
+                junction.geometry.type !== "Point"
+            ) {
+
+                return;
+
+            }
+
+
+            const naam =
+                junction.properties &&
+                junction.properties.name
+                    ? String(
+                        junction.properties.name
+                    ).trim()
+                    : "";
+
+
+            if (!naam) {
+                return;
+            }
+
+
+            /*
+               Alleen OSM-punten met "Knooppunt"
+               als naam worden opgenomen.
+            */
+
+            if (
+                !naam
+                    .toLowerCase()
+                    .startsWith("knooppunt ")
+            ) {
+
+                return;
+
+            }
+
+
+            const key =
+                naam.toLowerCase();
+
+
+            if (
+                uniekeNamen.has(key)
+            ) {
+
+                return;
+
+            }
+
+
+            uniekeNamen.add(key);
+
+
+            const coordinates =
+                junction.geometry.coordinates;
+
+
+            knooppunten.push({
+
+                index:
+                    index,
+
+                naam:
+                    naam,
+
+                lat:
+                    coordinates[1],
+
+                lon:
+                    coordinates[0]
+
+            });
+
+        }
+    );
+
+
+    knooppunten.sort(
+        (a, b) =>
+            a.naam.localeCompare(
+                b.naam,
+                "nl"
+            )
+    );
+
+
+    return knooppunten;
+
+}
+
+
+/* ============================================================
+   SNELWEGEN IN VIA-DROPDOWN
+   ============================================================ */
+
+function krijgAlleExacteSnelwegen() {
+
+    if (
+        !osmSnelwegen ||
+        !osmSnelwegen.features
+    ) {
+
+        return [];
+
+    }
+
+
+    const snelwegen =
+        new Set();
+
+
+    osmSnelwegen.features.forEach(
+        feature => {
+
+            const ref =
+                krijgRef(feature);
+
+
+            if (
+                ref &&
+                /^A\d+$/.test(ref)
+            ) {
+
+                /*
+                   Alleen exact één A-weg.
+
+                   A1       -> WEL
+                   A1;A35   -> NIET
+                   A1;N1    -> NIET
+                */
+
+                if (
+                    isExacteSnelweg(
+                        feature,
+                        ref
+                    )
+                ) {
+
+                    snelwegen.add(ref);
+
+                }
+
+            }
+
+        }
+    );
+
+
+    return Array.from(
+        snelwegen
+    ).sort(
+        (a, b) =>
+            a.localeCompare(
+                b,
+                undefined,
+                {
+                    numeric: true
+                }
+            )
+    );
+
+}
+
+
+/* ============================================================
+   VIA-DROPDOWN VULLEN
+   ============================================================ */
+
+function vulViaDropdown() {
+
+    const viaSelect =
+        document.getElementById(
+            "viaSnelweg"
+        );
+
+
+    viaSelect.innerHTML =
+        '<option value="">Geen VIA</option>';
+
+
+    /*
+       GROEP 1:
+       KNOOPPUNTEN
+    */
+
+    const knooppuntenGroep =
+        document.createElement(
+            "optgroup"
+        );
+
+
+    knooppuntenGroep.label =
+        "Knooppunten";
+
+
+    const knooppunten =
+        krijgViaKnooppunten();
+
+
+    knooppunten.forEach(
+        knooppunt => {
+
+            const optie =
+                document.createElement(
+                    "option"
+                );
+
+
+            optie.value =
+                `junction:${knooppunt.index}`;
+
+
+            optie.textContent =
+                knooppunt.naam;
+
+
+            knooppuntenGroep.appendChild(
+                optie
+            );
+
+        }
+    );
+
+
+    /*
+       GROEP 2:
+       SNELWEGEN
+    */
+
+    const snelwegenGroep =
+        document.createElement(
+            "optgroup"
+        );
+
+
+    snelwegenGroep.label =
+        "Snelwegen";
+
+
+    const snelwegen =
+        krijgAlleExacteSnelwegen();
+
+
+    snelwegen.forEach(
+        snelweg => {
+
+            const optie =
+                document.createElement(
+                    "option"
+                );
+
+
+            optie.value =
+                `road:${snelweg}`;
+
+
+            optie.textContent =
+                snelweg;
+
+
+            snelwegenGroep.appendChild(
+                optie
+            );
+
+        }
+    );
+
+
+    if (
+        knooppuntenGroep.children.length
+    ) {
+
+        viaSelect.appendChild(
+            knooppuntenGroep
+        );
+
+    }
+
+
+    if (
+        snelwegenGroep.children.length
+    ) {
+
+        viaSelect.appendChild(
+            snelwegenGroep
+        );
+
+    }
+
+}
+
+
+/* ============================================================
+   ALLE SNELWEGEN IN OPRIT/AFRIT DROPDOWNS
+   ============================================================ */
+
+function vulSnelwegen() {
+
+    const opritSnelweg =
+        document.getElementById(
+            "opritSnelweg"
+        );
+
+
+    const afritSnelweg =
+        document.getElementById(
+            "afritSnelweg"
+        );
+
+
+    const namen =
+        Object.keys(
+            aansluitingenPerSnelweg
+        )
+        .sort(
+            (a, b) =>
+                a.localeCompare(
+                    b,
+                    undefined,
+                    {
+                        numeric: true
+                    }
+                )
+        );
+
+
+    opritSnelweg.innerHTML =
+        '<option value="">Kies een snelweg</option>';
+
+
+    afritSnelweg.innerHTML =
+        '<option value="">Kies een snelweg</option>';
+
+
+    namen.forEach(
+        snelweg => {
+
+            if (
+                !aansluitingenPerSnelweg[
+                    snelweg
+                ] ||
+                aansluitingenPerSnelweg[
+                    snelweg
+                ].length === 0
+            ) {
+
+                return;
+
+            }
+
+
+            const optieOprit =
+                document.createElement(
+                    "option"
+                );
+
+
+            optieOprit.value =
+                snelweg;
+
+
+            optieOprit.textContent =
+                snelweg;
+
+
+            opritSnelweg.appendChild(
+                optieOprit
+            );
+
+
+            const optieAfrit =
+                document.createElement(
+                    "option"
+                );
+
+
+            optieAfrit.value =
+                snelweg;
+
+
+            optieAfrit.textContent =
+                snelweg;
+
+
+            afritSnelweg.appendChild(
+                optieAfrit
+            );
+
+        }
+    );
+
+
+    /*
+       VIA apart vullen.
+
+       Hierdoor komen hier alleen:
+       - Knooppunten
+       - Snelwegen
+    */
+
+    vulViaDropdown();
+
+}
+
+
+/* ============================================================
+   AANSLUITINGEN IN DROPDOWN VULLEN
+   ============================================================ */
+
+function vulAansluitingen(
+    selectElement,
+    snelweg
+) {
+
+    selectElement.innerHTML =
+        '<option value="">Kies een aansluiting</option>';
+
+
+    if (
+        !snelweg ||
+        !aansluitingenPerSnelweg[
+            snelweg
+        ]
+    ) {
+
+        return;
+
+    }
+
+
+    aansluitingenPerSnelweg[
+        snelweg
+    ].forEach(
+        (aansluiting, index) => {
+
+            const optie =
+                document.createElement(
+                    "option"
+                );
+
+
+            optie.value =
+                index;
+
+
+            optie.textContent =
+                aansluiting.naam;
+
+
+            selectElement.appendChild(
+                optie
+            );
+
+        }
+    );
+
+}
+
+
+/* ============================================================
+   AANSLUITING OPHALEN
+   ============================================================ */
+
+function krijgPunt(
+    snelweg,
+    index
+) {
+
+    if (
+        !aansluitingenPerSnelweg[
+            snelweg
+        ] ||
+        !aansluitingenPerSnelweg[
+            snelweg
+        ][index]
+    ) {
+
+        return null;
+
+    }
+
+
+    const punt =
+        aansluitingenPerSnelweg[
+            snelweg
+        ][index];
+
+
+    return {
+
+        naam:
+            punt.naam,
+
+        lat:
+            punt.lat,
+
+        lon:
+            punt.lon
+
+    };
+
+}
+
+
+/* ============================================================
+   ROUTE TEKENEN
+   ============================================================ */
+
+function tekenRoute(
+    route
+) {
+
+    if (routeLayer) {
+
+        map.removeLayer(
+            routeLayer
+        );
+
+    }
+
+
+    routeLayer =
+        L.geoJSON(
+            route.geometry,
+            {
+                style: {
+                    weight: 5
+                }
+            }
+        ).addTo(map);
+
+
+    map.fitBounds(
+        routeLayer.getBounds(),
+        {
+            padding: [
+                30,
+                30
+            ]
+        }
+    );
+
+}
+
+
+/* ============================================================
+   ROUTE OPHALEN VIA OSRM
+   ============================================================ */
+
+async function haalRouteOp(
+    punten
+) {
+
+    const coordinates =
+        punten
+            .map(
+                punt =>
+                    `${punt.lon},${punt.lat}`
+            )
+            .join(";");
+
+
+    const url =
+        `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson&alternatives=true`;
+
+
+    const response =
+        await fetch(
+            url
+        );
+
+
+    if (!response.ok) {
+
+        throw new Error(
+            "OSRM route-aanvraag mislukt."
+        );
+
+    }
+
+
+    const data =
+        await response.json();
+
+
+    if (
+        !data.routes ||
+        data.routes.length === 0
+    ) {
+
+        throw new Error(
+            "Geen route gevonden."
+        );
+
+    }
+
+
+    return data.routes;
+
+}
+
+
+/* ============================================================
+   AANSLUITING ALS ZONE
+   ============================================================ */
+
+const ROUTE_ZONE_METER = 200;
+
+
+function routeAfstandTotAansluiting(
+    coord,
+    aansluiting
+) {
+
+    return afstandTussenPunten(
+        coord[1],
+        coord[0],
+        aansluiting.lat,
+        aansluiting.lon
+    );
+
+}
+
+
+function afstandVanRoute(
+    coordinates
+) {
+
+    let totaal = 0;
+
+
+    for (
+        let i = 0;
+        i < coordinates.length - 1;
+        i++
+    ) {
+
+        totaal +=
+            afstandRouteSegment(
+                coordinates[i],
+                coordinates[i + 1]
+            );
+
+    }
+
+
+    return totaal;
+
+}
+
+
+/*
+   De aansluiting is een zone van 200 meter.
+*/
+
+function stopRouteBinnenZone(
+    route,
+    eind
+) {
+
+    if (
+        !route ||
+        !route.geometry ||
+        !route.geometry.coordinates ||
+        !eind
+    ) {
+
+        return route;
+
+    }
+
+
+    const coords =
+        route.geometry.coordinates;
+
+
+    let stopIndex = -1;
+
+
+    for (
+        let i = 0;
+        i < coords.length;
+        i++
+    ) {
+
+        if (
+            routeAfstandTotAansluiting(
+                coords[i],
+                eind
+            ) <= ROUTE_ZONE_METER
+        ) {
+
+            stopIndex = i;
+
+            break;
+
+        }
+
+    }
+
+
+    if (stopIndex < 1) {
+        return route;
+    }
+
+
+    const nieuweCoords =
+        coords.slice(
+            0,
+            stopIndex + 1
+        );
+
+
+    const nieuweRoute = {
+
+        ...route,
+
+        geometry: {
+
+            ...route.geometry,
+
+            coordinates:
+                nieuweCoords
+
+        }
+
+    };
+
+
+    nieuweRoute.distance =
+        afstandVanRoute(
+            nieuweCoords
+        );
+
+
+    if (
+        Number.isFinite(
+            route.duration
+        ) &&
+        route.distance > 0
+    ) {
+
+        nieuweRoute.duration =
+            route.duration *
+            (
+                nieuweRoute.distance /
+                route.distance
+            );
+
+    }
+
+
+    return nieuweRoute;
+
+}
+
+
+/* ============================================================
+   ZONE-KANDIDATEN
+   ============================================================ */
+
+function maakZoneKandidaten(
+    punt,
+    radius = 200,
+    maxAantal = 24
+) {
+
+    if (
+        !punt ||
+        !osmSnelwegen ||
+        !osmSnelwegen.features
+    ) {
+
+        return [];
+
+    }
+
+
+    const kandidaten = [];
+
+
+    osmSnelwegen.features.forEach(
+        feature => {
+
+            if (
+                !feature ||
+                !feature.geometry
+            ) {
+
+                return;
+
+            }
+
+
+            const ref =
+                krijgRef(
+                    feature
+                );
+
+
+            if (!ref) {
+                return;
+            }
+
+
+            const lijnen =
+                feature.geometry.type ===
+                "LineString"
+
+                    ? [
+                        feature.geometry.coordinates
+                    ]
+
+                    : feature.geometry.type ===
+                      "MultiLineString"
+
+                        ? feature.geometry.coordinates
+
+                        : [];
+
+
+            lijnen.forEach(
+                lijn => {
+
+                    if (
+                        !lijn ||
+                        lijn.length < 2
+                    ) {
+
+                        return;
+
+                    }
+
+
+                    let besteIndex = -1;
+                    let besteAfstand = Infinity;
+
+
+                    for (
+                        let i = 0;
+                        i < lijn.length;
+                        i++
+                    ) {
+
+                        const c =
+                            lijn[i];
+
+
+                        const d =
+                            afstandTussenPunten(
+                                punt.lat,
+                                punt.lon,
+                                c[1],
+                                c[0]
+                            );
+
+
+                        if (
+                            d <
+                            besteAfstand
+                        ) {
+
+                            besteAfstand =
+                                d;
+
+                            besteIndex =
+                                i;
+
+                        }
+
+                    }
+
+
+                    if (
+                        besteIndex < 0 ||
+                        besteAfstand > radius
+                    ) {
+
+                        return;
+
+                    }
+
+
+                    const projectie =
+                        dichtstbijzijndePuntOpLijn(
+                            punt.lat,
+                            punt.lon,
+                            lijn
+                        );
+
+
+                    if (
+                        projectie &&
+                        projectie.afstand <= radius
+                    ) {
+
+                        kandidaten.push({
+
+                            lat:
+                                projectie.lat,
+
+                            lon:
+                                projectie.lon,
+
+                            afstandTotPunt:
+                                projectie.afstand,
+
+                            ref:
+                                ref
+
+                        });
+
+                    }
+
+
+                    for (
+                        let offset = -4;
+                        offset <= 4;
+                        offset++
+                    ) {
+
+                        const i =
+                            besteIndex +
+                            offset;
+
+
+                        if (
+                            i < 0 ||
+                            i >= lijn.length
+                        ) {
+
+                            continue;
+
+                        }
+
+
+                        const c =
+                            lijn[i];
+
+
+                        const d =
+                            afstandTussenPunten(
+                                punt.lat,
+                                punt.lon,
+                                c[1],
+                                c[0]
+                            );
+
+
+                        if (
+                            d <= radius
+                        ) {
+
+                            kandidaten.push({
+
+                                lat:
+                                    c[1],
+
+                                lon:
+                                    c[0],
+
+                                afstandTotPunt:
+                                    d,
+
+                                ref:
+                                    ref
+
+                            });
+
+                        }
+
+                    }
+
+                }
+            );
+
+        }
+    );
+
+
+    kandidaten.sort(
+        (a, b) =>
+            a.afstandTotPunt -
+            b.afstandTotPunt
+    );
+
+
+    const uniek = [];
+    const gezien = new Set();
+
+
+    for (
+        const kandidaat of kandidaten
+    ) {
+
+        const key =
+            `${kandidaat.lon.toFixed(5)},${kandidaat.lat.toFixed(5)}`;
+
+
+        if (
+            gezien.has(key)
+        ) {
+
+            continue;
+
+        }
+
+
+        gezien.add(key);
+
+
+        uniek.push({
+
+            lat:
+                kandidaat.lat,
+
+            lon:
+                kandidaat.lon,
+
+            naam:
+                punt.naam,
+
+            ref:
+                kandidaat.ref,
+
+            afstandTotPunt:
+                kandidaat.afstandTotPunt
+
+        });
+
+
+        if (
+            uniek.length >= maxAantal
+        ) {
+
+            break;
+
+        }
+
+    }
+
+
+    return uniek;
+
+}
+
+
+/* ============================================================
+   ZONE-PAREN RANGSCHIKKEN
+   ============================================================ */
+
+async function rangschikZoneParen(
+    startKandidaten,
+    eindKandidaten
+) {
+
+    const punten =
+        [
+            ...startKandidaten,
+            ...eindKandidaten
+        ];
+
+
+    const aantalStart =
+        startKandidaten.length;
+
+
+    const coordinates =
+        punten
+            .map(
+                p =>
+                    `${p.lon},${p.lat}`
+            )
+            .join(";");
+
+
+    const response =
+        await fetch(
+            `https://router.project-osrm.org/table/v1/driving/${coordinates}?annotations=duration,distance`
+        );
+
+
+    if (!response.ok) {
+
+        throw new Error(
+            "OSRM table-aanvraag voor 200m-zone mislukt."
+        );
+
+    }
+
+
+    const data =
+        await response.json();
+
+
+    const paren = [];
+
+
+    for (
+        let i = 0;
+        i < aantalStart;
+        i++
+    ) {
+
+        for (
+            let j = 0;
+            j < eindKandidaten.length;
+            j++
+        ) {
+
+            const ei =
+                aantalStart +
+                j;
+
+
+            const score =
+                data.durations?.[i]?.[ei];
+
+
+            const afstand =
+                data.distances?.[i]?.[ei];
+
+
+            if (
+                Number.isFinite(score) &&
+                Number.isFinite(afstand)
+            ) {
+
+                paren.push({
+
+                    start:
+                        startKandidaten[i],
+
+                    eind:
+                        eindKandidaten[j],
+
+                    score:
+                        score,
+
+                    afstand:
+                        afstand
+
+                });
+
+            }
+
+        }
+
+    }
+
+
+    return paren.sort(
+        (a, b) =>
+            a.score -
+            b.score
+    );
+
+}
+
+
+/* ============================================================
+   NORMALE ROUTE
+   ============================================================ */
+
+async function berekenNormaleRouteExact(
+    start,
+    eind
+) {
+
+    const routes =
+        await haalRouteOp([
+            start,
+            eind
+        ]);
+
+
+    let beste = null;
+
+
+    for (
+        const route of routes
+    ) {
+
+        if (
+            !beste ||
+            route.distance <
+            beste.distance
+        ) {
+
+            beste =
+                route;
+
+        }
+
+    }
+
+
+    return beste;
+
+}
+
+
+async function berekenNormaleRoute(
+    start,
+    eind
+) {
+
+    const startKandidaten =
+        maakZoneKandidaten(
+            start,
+            ROUTE_ZONE_METER,
+            16
+        );
+
+
+    const eindKandidaten =
+        maakZoneKandidaten(
+            eind,
+            ROUTE_ZONE_METER,
+            16
+        );
+
+
+    if (
+        !startKandidaten.length ||
+        !eindKandidaten.length
+    ) {
+
+        return berekenNormaleRouteExact(
+            start,
+            eind
+        );
+
+    }
+
+
+    let paren;
+
+
+    try {
+
+        paren =
+            await rangschikZoneParen(
+                startKandidaten,
+                eindKandidaten
+            );
+
+    } catch (error) {
+
+        console.warn(
+            "200m-zone Table-filter mislukt; exacte route wordt geprobeerd:",
+            error
+        );
+
+
+        return berekenNormaleRouteExact(
+            start,
+            eind
+        );
+
+    }
+
+
+    let beste = null;
+
+
+    for (
+        const paar of paren.slice(
+            0,
+            12
+        )
+    ) {
+
+        try {
+
+            const routes =
+                await haalRouteOp([
+                    paar.start,
+                    paar.eind
+                ]);
+
+
+            for (
+                const route of routes
+            ) {
+
+                if (
+                    !beste ||
+                    route.distance <
+                    beste.distance
+                ) {
+
+                    beste =
+                        route;
+
+                }
+
+            }
+
+        } catch (error) {
+
+            console.warn(
+                "200m-zone route mislukt:",
+                error
+            );
+
+        }
+
+    }
+
+
+    return (
+        beste ||
+        berekenNormaleRouteExact(
+            start,
+            eind
+        )
+    );
+
+}
+
+
+/* ============================================================
+   VIA-SNELWEGEN
+   ============================================================ */
+
+function krijgViaWegen(
+    snelweg
+) {
+
+    if (
+        !osmSnelwegen ||
+        !osmSnelwegen.features
+    ) {
+
+        return [];
+
+    }
+
+
+    return osmSnelwegen.features.filter(
+        feature =>
+            isExacteSnelweg(
+                feature,
+                snelweg
+            )
+    );
+
+}
+
+
+/* ============================================================
+   VIA-KANDIDATEN
+   ============================================================ */
+
+function maakViaKandidaten(
+    snelweg
+) {
+
+    const wegen =
+        krijgViaWegen(
+            snelweg
+        );
+
+
+    const kandidaten = [];
+
+
+    const DOEL_AANTAL = 40;
+
+
+    wegen.forEach(
+        feature => {
+
+            if (
+                !feature.geometry
+            ) {
+
+                return;
+
+            }
+
+
+            const lijnen =
+                feature.geometry.type ===
+                "LineString"
+
+                    ? [
+                        feature.geometry.coordinates
+                    ]
+
+                    : feature.geometry.type ===
+                      "MultiLineString"
+
+                        ? feature.geometry.coordinates
+
+                        : [];
+
+
+            lijnen.forEach(
+                lijn => {
+
+                    if (!lijn.length) {
+                        return;
+                    }
+
+
+                    const stap =
+                        Math.max(
+                            1,
+                            Math.floor(
+                                lijn.length /
+                                8
+                            )
+                        );
+
+
+                    for (
+                        let i = 0;
+                        i < lijn.length;
+                        i += stap
+                    ) {
+
+                        const coord =
+                            lijn[i];
+
+
+                        kandidaten.push({
+
+                            lon:
+                                coord[0],
+
+                            lat:
+                                coord[1]
+
+                        });
+
+                    }
+
+                }
+            );
+
+        }
+    );
+
+
+    const uniek = [];
+    const gezien = new Set();
+
+
+    kandidaten.forEach(
+        punt => {
+
+            const key =
+                `${punt.lon.toFixed(4)},${punt.lat.toFixed(4)}`;
+
+
+            if (
+                !gezien.has(key)
+            ) {
+
+                gezien.add(key);
+
+                uniek.push(
+                    punt
+                );
+
+            }
+
+        }
+    );
+
+
+    if (
+        uniek.length <=
+        DOEL_AANTAL
+    ) {
+
+        return uniek;
+
+    }
+
+
+    const resultaat = [];
+
+
+    const stap =
+        (
+            uniek.length - 1
+        ) /
+        (
+            DOEL_AANTAL - 1
+        );
+
+
+    for (
+        let i = 0;
+        i < DOEL_AANTAL;
+        i++
+    ) {
+
+        resultaat.push(
+            uniek[
+                Math.round(
+                    i * stap
+                )
+            ]
+        );
+
+    }
+
+
+    return resultaat;
+
+}
+
+
+/* ============================================================
+   AFSTAND ROUTESEGMENT
+   ============================================================ */
+
+function afstandRouteSegment(
+    p1,
+    p2
+) {
+
+    return afstandTussenPunten(
+        p1[1],
+        p1[0],
+        p2[1],
+        p2[0]
+    );
+
+}
+
+
+/* ============================================================
+   PUNT OP VIA
+   ============================================================ */
+
+function puntLigtOpVia(
+    coord,
+    viaFeatures
+) {
+
+    const lon =
+        coord[0];
+
+    const lat =
+        coord[1];
+
+
+    for (
+        const feature of viaFeatures
+    ) {
+
+        const afstand =
+            afstandPuntNaarFeature(
+                lat,
+                lon,
+                feature
+            );
+
+
+        if (
+            afstand <= 40
+        ) {
+
+            return true;
+
+        }
+
+    }
+
+
+    return false;
+
+}
+
+
+/* ============================================================
+   VIA-AFSTAND
+   ============================================================ */
+
+function berekenViaAfstand(
+    route,
+    viaFeatures
+) {
+
+    if (
+        !route ||
+        !route.geometry ||
+        !route.geometry.coordinates
+    ) {
+
+        return 0;
+
+    }
+
+
+    const coords =
+        route.geometry.coordinates;
+
+
+    let viaAfstand = 0;
+
+
+    for (
+        let i = 0;
+        i < coords.length - 1;
+        i++
+    ) {
+
+        const p1 =
+            coords[i];
+
+        const p2 =
+            coords[i + 1];
+
+
+        const p1OpVia =
+            puntLigtOpVia(
+                p1,
+                viaFeatures
+            );
+
+
+        const p2OpVia =
+            puntLigtOpVia(
+                p2,
+                viaFeatures
+            );
+
+
+        if (
+            p1OpVia &&
+            p2OpVia
+        ) {
+
+            viaAfstand +=
+                afstandRouteSegment(
+                    p1,
+                    p2
+                );
+
+        }
+
+    }
+
+
+    return viaAfstand;
+
+}
+
+
+/* ============================================================
+   VIA TABLE FILTER
+   ============================================================ */
+
+async function rangschikViaKandidaten(
+    start,
+    eind,
+    kandidaten
+) {
+
+    const punten =
+        [
+            start,
+            ...kandidaten,
+            eind
+        ];
+
+
+    const coordinates =
+        punten
+            .map(
+                punt =>
+                    `${punt.lon},${punt.lat}`
+            )
+            .join(";");
+
+
+    const url =
+        `https://router.project-osrm.org/table/v1/driving/${coordinates}?annotations=duration,distance`;
+
+
+    const response =
+        await fetch(
+            url
+        );
+
+
+    if (!response.ok) {
+
+        throw new Error(
+            "OSRM table-aanvraag mislukt."
+        );
+
+    }
+
+
+    const data =
+        await response.json();
+
+
+    if (
+        !data.durations ||
+        !data.distances
+    ) {
+
+        throw new Error(
+            "OSRM gaf geen afstanden voor de VIA-kandidaten terug."
+        );
+
+    }
+
+
+    const startIndex = 0;
+
+    const eindIndex =
+        punten.length - 1;
+
+
+    const gesorteerd =
+        kandidaten.map(
+            (kandidaat, i) => {
+
+                const index =
+                    i + 1;
+
+
+                const heen =
+                    data.durations[
+                        startIndex
+                    ]?.[
+                        index
+                    ];
+
+
+                const terug =
+                    data.durations[
+                        index
+                    ]?.[
+                        eindIndex
+                    ];
+
+
+                const afstandHeen =
+                    data.distances[
+                        startIndex
+                    ]?.[
+                        index
+                    ];
+
+
+                const afstandTerug =
+                    data.distances[
+                        index
+                    ]?.[
+                        eindIndex
+                    ];
+
+
+                return {
+
+                    kandidaat:
+                        kandidaat,
+
+                    score:
+                        (
+                            heen ??
+                            Infinity
+                        ) +
+                        (
+                            terug ??
+                            Infinity
+                        ),
+
+                    afstand:
+                        (
+                            afstandHeen ??
+                            Infinity
+                        ) +
+                        (
+                            afstandTerug ??
+                            Infinity
+                        )
+
+                };
+
+            }
+        );
+
+
+    return gesorteerd
+        .filter(
+            item =>
+                Number.isFinite(
+                    item.score
+                )
+        )
+        .sort(
+            (a, b) =>
+                a.score -
+                b.score
+        );
+
+}
+
+
+/* ============================================================
+   KNOOPPUNT OPHALEN
+   ============================================================ */
+
+function krijgKnooppunt(
+    index
+) {
+
+    if (
+        !osmJunctions ||
+        !osmJunctions.features ||
+        !osmJunctions.features[index]
+    ) {
+
+        return null;
+
+    }
+
+
+    const j =
+        osmJunctions.features[
+            index
+        ];
+
+
+    const c =
+        j.geometry &&
+        j.geometry.coordinates;
+
+
+    if (
+        !c ||
+        j.geometry.type !==
+        "Point"
+    ) {
+
+        return null;
+
+    }
+
+
+    const naam =
+        j.properties &&
+        j.properties.name
+            ? String(
+                j.properties.name
+            ).trim()
+            : "Knooppunt";
+
+
+    return {
+
+        naam:
+            naam,
+
+        lat:
+            c[1],
+
+        lon:
+            c[0]
+
+    };
+
+}
+
+
+/* ============================================================
+   VIA-KNOOPPUNT ROUTE
+   ============================================================
+
+   BELANGRIJK:
+
+   Een knooppunt heeft een statisch OSM-punt.
+
+   De route hoeft NIET exact over dit punt.
+
+   Binnen 1000 meter is voldoende.
+
+   Daarom gebruiken we voor een knooppunt
+   een zone van 1000 meter.
+
+   ============================================================ */
+
+const VIA_KNOOPPUNT_ZONE_METER = 1000;
+
+
+async function zoekViaKnooppuntRoute(
+    start,
+    eind,
+    knooppunt
+) {
+
+    /*
+       Zoek snelwegpunten binnen 1000 meter
+       van het statische knooppunt.
+    */
+
+    const viaKandidaten =
+        maakZoneKandidaten(
+            knooppunt,
+            VIA_KNOOPPUNT_ZONE_METER,
+            24
+        );
+
+
+    const startKandidaten =
+        maakZoneKandidaten(
+            start,
+            ROUTE_ZONE_METER,
+            8
+        );
+
+
+    const eindKandidaten =
+        maakZoneKandidaten(
+            eind,
+            ROUTE_ZONE_METER,
+            8
+        );
+
+
+    if (
+        !viaKandidaten.length
+    ) {
+
+        throw new Error(
+            `Geen snelweg gevonden binnen ${VIA_KNOOPPUNT_ZONE_METER} meter van ${knooppunt.naam}.`
+        );
+
+    }
+
+
+    /*
+       Eerst bepalen welke punten rond het
+       knooppunt logisch tussen start en eind liggen.
+    */
+
+    let gerangschikt;
+
+
+    try {
+
+        gerangschikt =
+            await rangschikViaKandidaten(
+                start,
+                eind,
+                viaKandidaten
+            );
+
+    } catch (error) {
+
+        console.warn(
+            "VIA-knooppunt Table-filter mislukt:",
+            error
+        );
+
+
+        gerangschikt =
+            viaKandidaten.map(
+                kandidaat => ({
+                    kandidaat:
+                        kandidaat,
+
+                    score:
+                        0
+                })
+            );
+
+    }
+
+
+    let beste = null;
+
+
+    /*
+       We proberen meerdere logische punten.
+
+       Daardoor wordt niet automatisch de dichtstbijzijnde
+       rijbaan gekozen als die niet goed bereikbaar is.
+    */
+
+    for (
+        const item of gerangschikt.slice(
+            0,
+            10
+        )
+    ) {
+
+        const viaPunt =
+            item.kandidaat;
+
+
+        const punten =
+            [
+                ...startKandidaten,
+                viaPunt,
+                ...eindKandidaten
+            ];
+
+
+        const viaIndex =
+            startKandidaten.length;
+
+
+        const coords =
+            punten
+                .map(
+                    p =>
+                        `${p.lon},${p.lat}`
+                )
+                .join(";");
+
+
+        try {
+
+            const response =
+                await fetch(
+                    `https://router.project-osrm.org/table/v1/driving/${coords}?annotations=duration,distance`
+                );
+
+
+            if (!response.ok) {
+
+                throw new Error(
+                    "Table-aanvraag mislukt."
+                );
+
+            }
+
+
+            const data =
+                await response.json();
+
+
+            const combinaties = [];
+
+
+            for (
+                let i = 0;
+                i <
+                startKandidaten.length;
+                i++
+            ) {
+
+                const heen =
+                    data.durations?.[
+                        i
+                    ]?.[
+                        viaIndex
+                    ];
+
+
+                if (
+                    !Number.isFinite(
+                        heen
+                    )
+                ) {
+
+                    continue;
+
+                }
+
+
+                for (
+                    let j = 0;
+                    j <
+                    eindKandidaten.length;
+                    j++
+                ) {
+
+                    const eindIndex =
+                        viaIndex +
+                        1 +
+                        j;
+
+
+                    const terug =
+                        data.durations?.[
+                            viaIndex
+                        ]?.[
+                            eindIndex
+                        ];
+
+
+                    if (
+                        !Number.isFinite(
+                            terug
+                        )
+                    ) {
+
+                        continue;
+
+                    }
+
+
+                    combinaties.push({
+
+                        start:
+                            startKandidaten[i],
+
+                        eind:
+                            eindKandidaten[j],
+
+                        score:
+                            heen +
+                            terug
+
+                    });
+
+                }
+
+            }
+
+
+            combinaties.sort(
+                (a, b) =>
+                    a.score -
+                    b.score
+            );
+
+
+            /*
+               De beste combinaties daadwerkelijk
+               laten routeren.
+            */
+
+            for (
+                const combinatie of
+                combinaties.slice(
+                    0,
+                    3
+                )
+            ) {
+
+                try {
+
+                    const routes =
+                        await haalRouteOp([
+                            combinatie.start,
+                            viaPunt,
+                            combinatie.eind
+                        ]);
+
+
+                    for (
+                        const route of routes
+                    ) {
+
+                        /*
+                           Controleer achteraf expliciet
+                           of de route daadwerkelijk binnen
+                           1000 meter van het statische
+                           knooppunt komt.
+                        */
+
+                        const komtBinnen1000 =
+                            routeKomtBinnenAfstand(
+                                route,
+                                knooppunt,
+                                VIA_KNOOPPUNT_ZONE_METER
+                            );
+
+
+                        if (
+                            !komtBinnen1000
+                        ) {
+
+                            continue;
+
+                        }
+
+
+                        const zoneRoute =
+                            stopRouteBinnenZone(
+                                route,
+                                eind
+                            );
+
+
+                        if (
+                            !beste ||
+                            zoneRoute.distance <
+                            beste.distance
+                        ) {
+
+                            beste =
+                                zoneRoute;
+
+                        }
+
+                    }
+
+                } catch (error) {
+
+                    console.warn(
+                        "VIA-knooppunt combinatie mislukt:",
+                        error
+                    );
+
+                }
+
+            }
+
+        } catch (error) {
+
+            console.warn(
+                "VIA-knooppunt Table-aanvraag mislukt:",
+                error
+            );
+
+        }
+
+    }
+
+
+    /*
+       Fallback:
+       probeer het statische knooppunt zelf.
+    */
+
+    if (!beste) {
+
+        try {
+
+            const routes =
+                await haalRouteOp([
+                    start,
+                    knooppunt,
+                    eind
+                ]);
+
+
+            for (
+                const route of routes
+            ) {
+
+                const komtBinnen1000 =
+                    routeKomtBinnenAfstand(
+                        route,
+                        knooppunt,
+                        VIA_KNOOPPUNT_ZONE_METER
+                    );
+
+
+                if (
+                    !komtBinnen1000
+                ) {
+
+                    continue;
+
+                }
+
+
+                if (
+                    !beste ||
+                    route.distance <
+                    beste.distance
+                ) {
+
+                    beste =
+                        route;
+
+                }
+
+            }
+
+        } catch (error) {
+
+            console.warn(
+                "Exact knooppunt als fallback mislukt:",
+                error
+            );
+
+        }
+
+    }
+
+
+    return beste;
+
+}
+
+
+/* ============================================================
+   CONTROLE ROUTE BINNEN AFSTAND VAN PUNT
+   ============================================================ */
+
+function routeKomtBinnenAfstand(
+    route,
+    punt,
+    maximaleAfstand
+) {
+
+    if (
+        !route ||
+        !route.geometry ||
+        !route.geometry.coordinates ||
+        !punt
+    ) {
+
+        return false;
+
+    }
+
+
+    const coords =
+        route.geometry.coordinates;
+
+
+    for (
+        const coord of coords
+    ) {
+
+        const afstand =
+            afstandTussenPunten(
+                coord[1],
+                coord[0],
+                punt.lat,
+                punt.lon
+            );
+
+
+        if (
+            afstand <=
+            maximaleAfstand
+        ) {
+
+            return true;
+
+        }
+
+    }
+
+
+    return false;
+
+}
+
+
+/* ============================================================
+   VIA-SNELWEG ROUTE
+   ============================================================ */
+
+async function zoekViaRoute(
+    start,
+    eind,
+    via
+) {
+
+    const kandidaten =
+        maakViaKandidaten(
+            via
+        );
+
+
+    const viaFeatures =
+        krijgViaWegen(
+            via
+        );
+
+
+    if (
+        kandidaten.length === 0
+    ) {
+
+        throw new Error(
+            "Geen OSM-geometrie gevonden voor " +
+            via
+        );
+
+    }
+
+
+    let gerangschikt;
+
+
+    try {
+
+        gerangschikt =
+            await rangschikViaKandidaten(
+                start,
+                eind,
+                kandidaten
+            );
+
+    } catch (error) {
+
+        console.warn(
+            "VIA Table-filter mislukt; alle kandidaten worden geprobeerd:",
+            error
+        );
+
+
+        gerangschikt =
+            kandidaten.map(
+                kandidaat => ({
+
+                    kandidaat:
+                        kandidaat,
+
+                    score:
+                        0
+
+                })
+            );
+
+    }
+
+
+    const MAX_ROUTE_KANDIDATEN =
+        8;
+
+
+    const teProberen =
+        gerangschikt.slice(
+            0,
+            Math.min(
+                MAX_ROUTE_KANDIDATEN,
+                gerangschikt.length
+            )
+        );
+
+
+    let besteRoute = null;
+    let besteViaAfstand = 0;
+
+
+    for (
+        const item of teProberen
+    ) {
+
+        const kandidaat =
+            item.kandidaat;
+
+
+        try {
+
+            const routes =
+                await haalRouteOp([
+                    start,
+                    kandidaat,
+                    eind
+                ]);
+
+
+            for (
+                const route of routes
+            ) {
+
+                const zoneRoute =
+                    stopRouteBinnenZone(
+                        route,
+                        eind
+                    );
+
+
+                const viaAfstand =
+                    berekenViaAfstand(
+                        zoneRoute,
+                        viaFeatures
+                    );
+
+
+                /*
+                   Minimaal 500 meter over de
+                   EXACTE snelweg.
+                */
+
+                if (
+                    viaAfstand >= 500
+                ) {
+
+                    if (
+                        !besteRoute ||
+                        zoneRoute.distance <
+                        besteRoute.distance
+                    ) {
+
+                        besteRoute =
+                            zoneRoute;
+
+                        besteViaAfstand =
+                            viaAfstand;
+
+                    }
+
+                }
+
+            }
+
+        } catch (error) {
+
+            console.warn(
+                "Via-kandidaat mislukt:",
+                error
+            );
+
+        }
+
+    }
+
+
+    if (besteRoute) {
+
+        besteRoute.viaAfstand =
+            besteViaAfstand;
+
+    }
+
+
+    return besteRoute;
+
+}
+
+
+/* ============================================================
+   ROUTE BEREKENEN
+   ============================================================ */
+
+async function berekenRoute() {
+
+    const opritSnelweg =
+        document.getElementById(
+            "opritSnelweg"
+        ).value;
+
+
+    const opritIndex =
+        document.getElementById(
+            "oprit"
+        ).value;
+
+
+    const via =
+        document.getElementById(
+            "viaSnelweg"
+        ).value;
+
+
+    const afritSnelweg =
+        document.getElementById(
+            "afritSnelweg"
+        ).value;
+
+
+    const afritIndex =
+        document.getElementById(
+            "afrit"
+        ).value;
+
+
+    const resultaat =
+        document.getElementById(
+            "resultaat"
+        );
+
+
+    if (
+        !opritSnelweg ||
+        opritIndex === "" ||
+        !afritSnelweg ||
+        afritIndex === ""
+    ) {
+
+        resultaat.innerHTML =
+            "<strong>Kies eerst een oprit en afrit.</strong>";
+
+        return;
+
+    }
+
+
+    const start =
+        krijgPunt(
+            opritSnelweg,
+            Number(
+                opritIndex
+            )
+        );
+
+
+    const eind =
+        krijgPunt(
+            afritSnelweg,
+            Number(
+                afritIndex
+            )
+        );
+
+
+    if (
+        !start ||
+        !eind
+    ) {
+
+        resultaat.innerHTML =
+            "<strong>De gekozen aansluiting kon niet worden gevonden.</strong>";
+
+        return;
+
+    }
+
+
+    resultaat.innerHTML =
+        "Route wordt berekend...";
+
+
+    try {
+
+        let route;
+
+
+        if (via) {
+
+            if (
+                via.startsWith(
+                    "junction:"
+                )
+            ) {
+
+                const knooppunt =
+                    krijgKnooppunt(
+                        Number(
+                            via.split(":")[1]
+                        )
+                    );
+
+
+                if (!knooppunt) {
+
+                    throw new Error(
+                        "Het gekozen knooppunt kon niet worden gevonden."
+                    );
+
+                }
+
+
+                route =
+                    await zoekViaKnooppuntRoute(
+                        start,
+                        eind,
+                        knooppunt
+                    );
+
+
+            } else {
+
+                const viaSnelweg =
+                    via.startsWith(
+                        "road:"
+                    )
+                        ? via.substring(5)
+                        : via;
+
+
+                route =
+                    await zoekViaRoute(
+                        start,
+                        eind,
+                        viaSnelweg
+                    );
+
+            }
+
+        } else {
+
+            route =
+                await berekenNormaleRoute(
+                    start,
+                    eind
+                );
+
+        }
+
+
+        if (!route) {
+
+            resultaat.innerHTML =
+                `<strong>Geen route gevonden die aan de gekozen VIA voldoet.</strong>`;
+
+            return;
+
+        }
+
+
+        tekenRoute(
+            route
+        );
+
+
+        if (startMarker) {
+
+            map.removeLayer(
+                startMarker
+            );
+
+        }
+
+
+        if (endMarker) {
+
+            map.removeLayer(
+                endMarker
+            );
+
+        }
+
+
+        startMarker =
+            L.marker([
+                start.lat,
+                start.lon
+            ])
+            .addTo(map)
+            .bindPopup(
+                `Oprit: ${start.naam}`
+            );
+
+
+        endMarker =
+            L.marker([
+                eind.lat,
+                eind.lon
+            ])
+            .addTo(map)
+            .bindPopup(
+                `Afrit: ${eind.naam}`
+            );
+
+
+        const afstandKm =
+            (
+                route.distance /
+                1000
+            ).toFixed(1);
+
+
+        if (via) {
+
+            if (
+                via.startsWith(
+                    "road:"
+                )
+            ) {
+
+                const viaSnelweg =
+                    via.substring(5);
+
+
+                const viaKm =
+                    (
+                        (
+                            route.viaAfstand ||
+                            0
+                        ) /
+                        1000
+                    ).toFixed(2);
+
+
+                resultaat.innerHTML =
+                    `<strong>Afstand:</strong> ${afstandKm} km<br>` +
+                    `<strong>VIA:</strong> ${viaSnelweg}<br>` +
+                    `<strong>Over exacte ${viaSnelweg}-weg:</strong> ${viaKm} km`;
+
+            } else {
+
+                const knooppunt =
+                    krijgKnooppunt(
+                        Number(
+                            via.split(":")[1]
+                        )
+                    );
+
+
+                resultaat.innerHTML =
+                    `<strong>Afstand:</strong> ${afstandKm} km<br>` +
+                    `<strong>VIA:</strong> ${knooppunt ? knooppunt.naam : "Knooppunt"}<br>` +
+                    `<strong>Zone:</strong> binnen 1000 meter van het knooppunt`;
+
+            }
+
+        } else {
+
+            resultaat.innerHTML =
+                `<strong>Afstand:</strong> ${afstandKm} km`;
+
+        }
+
+
+    } catch (error) {
+
+        console.error(
+            error
+        );
+
+
+        resultaat.innerHTML =
+            `<strong>Route kon niet worden berekend.</strong><br><br>` +
+            `${error.message || error}`;
+
+    }
+
+}
+
+
+/* ============================================================
+   DROPDOWN-EVENTS
+   ============================================================ */
+
+document
+    .getElementById(
+        "opritSnelweg"
+    )
+    .addEventListener(
+        "change",
+        function () {
+
+            vulAansluitingen(
+                document.getElementById(
+                    "oprit"
+                ),
+                this.value
+            );
+
+        }
+    );
+
+
+document
+    .getElementById(
+        "afritSnelweg"
+    )
+    .addEventListener(
+        "change",
+        function () {
+
+            vulAansluitingen(
+                document.getElementById(
+                    "afrit"
+                ),
+                this.value
+            );
+
+        }
+    );
+
+
+/* ============================================================
+   OSM DATA STARTEN
+   ============================================================ */
+
+laadOSMData();
+
+</script>
+
+</body>
+</html>
